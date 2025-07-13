@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB Reader - Advanced Features</title>
+    <style>
+        :root {
+            --bg-color: #f0f0f0;
+            --text-color: #333;
+            --viewer-bg: white;
+            --control-bg: #333;
+            --control-text: white;
+            --shadow-color: rgba(0,0,0,0.1);
+            --accent-color: #4CAF50;
+            --font-size: 16px;
+        }
+        
+        body.dark {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --viewer-bg: #2a2a2a;
+            --control-bg: #111;
+            --control-text: #e0e0e0;
+            --shadow-color: rgba(255,255,255,0.1);
+            --accent-color: #66bb6a;
+        }
+        
+        body { 
+            font-family: sans-serif; 
+            margin: 0; 
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        #container { 
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        /* 상단 번역 바 */
+        #translation-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 20px;
+            background: var(--control-bg);
+            color: var(--control-text);
+            border-bottom: 1px solid var(--shadow-color);
+            gap: 15px;
+        }
+        
+        #translation-bar.hidden {
+            display: none;
+        }
+        
+        #translation-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #translation-controls select {
+            padding: 5px 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 3px;
+            background: var(--viewer-bg);
+            color: var(--text-color);
+        }
+        
+        #translation-controls label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+        }
+        
+        #translate-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        #translate-btn:hover:not(:disabled) {
+            background: #45a049;
+        }
+        
+        #translate-btn.translating {
+            background: #ff9800;
+        }
+        
+        #translate-btn:disabled {
+            background: #666;
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #viewer {
+            flex: 1;
+            overflow: hidden;
+            background: var(--viewer-bg);
+            margin: 20px;
+            margin-top: 10px; /* 상단 바가 있으므로 마진 조정 */
+            box-shadow: 0 0 10px var(--shadow-color);
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+            padding: 40px;
+            transition: background-color 0.3s;
+        }
+        
+        #drop-zone {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            border: 2px dashed #ccc;
+            padding: 40px;
+            background-color: var(--viewer-bg);
+            z-index: 1000;
+        }
+        
+        #controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: var(--control-bg);
+            color: var(--control-text);
+            gap: 20px;
+        }
+        
+        #controls button {
+            font-size: 1em;
+            padding: 8px 16px;
+            cursor: pointer;
+            background: #555;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        #controls button:hover:not(:disabled) {
+            background: #666;
+        }
+        
+        #controls button:disabled {
+            background: #333;
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* 페이지 네비게이션 */
+        #page-navigation {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #page-input {
+            width: 50px;
+            padding: 5px;
+            text-align: center;
+            border: 1px solid #666;
+            border-radius: 3px;
+            background: var(--viewer-bg);
+            color: var(--text-color);
+        }
+        
+        /* 페이지 콘텐츠 스타일 */
+        #page-content {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+            font-size: var(--font-size);
+            height: calc(100vh - 170px); /* 상단 바 높이 고려 */
+            overflow-y: auto;
+            padding: 20px;
+            color: var(--text-color);
+        }
+        
+        #page-content img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1em auto;
+        }
+        
+        /* 도구 모음 */
+        #toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        #toolbar select, #toolbar input {
+            padding: 5px;
+            border: 1px solid #666;
+            border-radius: 3px;
+            background: var(--viewer-bg);
+            color: var(--text-color);
+        }
+        
+        /* 사이드바 */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: var(--viewer-bg);
+            box-shadow: 0 0 10px var(--shadow-color);
+            z-index: 1001;
+            overflow-y: auto;
+            transition: transform 0.3s;
+            padding: 20px;
+        }
+        
+        .sidebar.left {
+            left: 0;
+            transform: translateX(-100%);
+        }
+        
+        .sidebar.left.open {
+            transform: translateX(0);
+        }
+        
+        .sidebar.right {
+            right: 0;
+            transform: translateX(100%);
+        }
+        
+        .sidebar.right.open {
+            transform: translateX(0);
+        }
+        
+        .sidebar h3 {
+            margin-top: 0;
+        }
+        
+        /* 나머지 CSS는 동일... */
+        
+        /* 원문+번역 스타일 */
+        .dual-lang-container {
+            margin-bottom: 1.5em;
+            border-left: 3px solid var(--accent-color);
+            padding-left: 15px;
+        }
+        
+        .original-text {
+            color: var(--text-color);
+            opacity: 0.7;
+            font-size: 0.9em;
+            margin-bottom: 0.5em;
+            font-style: italic;
+        }
+        
+        .translated-text {
+            color: var(--text-color);
+            font-size: 1em;
+            font-weight: 500;
+        }
+        
+        body.dark .original-text {
+            opacity: 0.6;
+        }
+        
+        .dual-lang-container:not(:last-child)::after {
+            content: '';
+            display: block;
+            height: 1px;
+            background: var(--shadow-color);
+            margin: 1em 0;
+        }
+        
+        .lang-label {
+            font-size: 0.75em;
+            color: var(--accent-color);
+            font-weight: bold;
+            margin-bottom: 0.25em;
+        }
+        
+        /* 번역 상태 표시 */
+        #translation-status {
+            position: absolute;
+            top: 10px;
+            right: 30px;
+            padding: 5px 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border-radius: 3px;
+            font-size: 12px;
+            display: none;
+        }
+        
+        #translation-status.show {
+            display: block;
+        }
+        
+        /* 진행 바 */
+        .progress-container {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+            display: none;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: var(--accent-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .sidebar h3 {
+            margin-top: 0;
+        }
+        
+        /* 목차 스타일 */
+        #toc-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+/* 목차 아이템 개선 */
+#toc-list li {
+    padding: 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+}
+        
+/* 목차 아이템 개선 - 이어서 */
+#toc-list li:hover {
+    background: var(--shadow-color);
+    padding-left: 15px;
+    border-left-color: var(--accent-color);
+}
+
+#toc-list li.active {
+    background: var(--accent-color);
+    color: white;
+    border-left-color: #2e7d32;
+}
+
+        
+        /* 북마크 스타일 */
+        .bookmark-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: var(--shadow-color);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .bookmark-item:hover {
+            background: var(--accent-color);
+            color: white;
+        }
+        
+        .bookmark-delete {
+            cursor: pointer;
+            color: #f44336;
+            font-weight: bold;
+        }
+        
+        /* 검색 스타일 */
+        #search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        #search-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #666;
+            border-radius: 3px;
+            background: var(--viewer-bg);
+            color: var(--text-color);
+        }
+        
+/* 검색 결과 개선 */
+.search-result {
+    padding: 12px;
+    margin: 8px 0;
+    background: var(--shadow-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.search-result:hover {
+    background: var(--accent-color);
+    color: white;
+    transform: translateX(5px);
+}
+
+.search-result strong {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--accent-color);
+}
+
+.search-result:hover strong {
+    color: white;
+}
+        
+/* 하이라이트 개선 */
+.highlight {
+    background: #ffeb3b;
+    color: #000;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+      
+body.dark .highlight {
+    background: #fdd835;
+    color: #000;
+}
+
+        /* 글자 크기 조절 */
+        #font-size-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* 번역 관련 스타일 */
+        #translation-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-left: 1px solid #666;
+            padding-left: 20px;
+        }
+        
+        #translate-btn {
+            background: var(--accent-color) !important;
+        }
+        
+        #translate-btn:hover:not(:disabled) {
+            background: #45a049 !important;
+        }
+        
+        #translate-btn.translating {
+            background: #ff9800 !important;
+        }
+        
+
+        
+        /* 오버레이 */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: none;
+        }
+        
+        .overlay.show {
+            display: block;
+        }
+        
+        /* 페이지 번호 표시 */
+        .page-number {
+            position: absolute;
+            top: 10px;
+            right: 30px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* 로딩 표시 */
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        
+        /* 툴팁 */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 120px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+/* 북마크 아이템 개선 */
+.bookmark-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px;
+    margin: 8px 0;
+    background: var(--shadow-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.bookmark-item:hover {
+    background: var(--accent-color);
+    color: white;
+    transform: translateX(5px);
+}
+
+
+
+
+
+
+
+/* 언어 라벨 */
+.lang-label {
+    font-size: 0.75em;
+    color: var(--accent-color);
+    font-weight: bold;
+    margin-bottom: 0.25em;
+}
+    </style>
+    <script src="./lib/jszip.min.js"></script>
+    <script src="./lib/epub.min.js"></script>
+</head>
+<body>
+    <div class="overlay" id="overlay"></div>
+    
+    <!-- 목차 사이드바 -->
+    <div class="sidebar left" id="toc-sidebar">
+        <h3>목차</h3>
+        <ul id="toc-list"></ul>
+    </div>
+    
+    <!-- 검색/북마크 사이드바 -->
+    <div class="sidebar right" id="search-sidebar">
+        <h3>검색</h3>
+        <div id="search-box">
+            <input type="text" id="search-input" placeholder="검색어 입력...">
+            <button id="search-btn">검색</button>
+        </div>
+        <div id="search-results"></div>
+        
+        <h3 style="margin-top: 30px;">북마크</h3>
+        <button id="add-bookmark">현재 페이지 북마크</button>
+        <div id="bookmark-list"></div>
+    </div>
+    
+    <div id="container">
+        <!-- 상단 번역 바 -->
+        <div id="translation-bar" class="hidden">
+            <div id="translation-controls">
+                <label for="target-lang">번역:</label>
+                <select id="target-lang">
+                    <option value="">원문</option>
+                    <option value="ko">한국어</option>
+                    <option value="en">영어</option>
+                    <option value="ja">일본어</option>
+                    <option value="zh">중국어</option>
+                    <option value="fr">프랑스어</option>
+                    <option value="de">독일어</option>
+                    <option value="es">스페인어</option>
+                </select>
+                <!-- <label>
+                    <input type="checkbox" id="show-original-check">
+                    원문 함께 보기
+                </label> -->
+                <button id="translate-btn">번역</button>
+            </div>
+        </div>
+        
+        <div id="drop-zone">
+            <h2>여기에 EPUB 파일을 드래그 앤 드롭하세요.</h2>
+            <p>다양한 기능을 갖춘 EPUB 리더입니다.</p>
+            <p style="font-size: 0.9em; color: #666; margin-top: 20px;">
+                주요 기능:<br>
+                • 페이지 단위 표시<br>
+                • 다국어 번역 지원<br>
+                • 북마크, 검색, 목차<br>
+                • 다크 모드, 글자 크기 조절
+            </p>
+        </div>
+        
+        <div id="viewer" class="hidden">
+            <div class="page-number"></div>
+            <div id="translation-status"></div>
+            <div id="page-content"></div>
+            <div class="progress-container" id="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+        </div>
+        
+        <div id="controls" class="hidden">
+            <div id="page-navigation">
+                <button id="prev">◀</button>
+                <span>
+                    <input type="number" id="page-input" min="1"> / 
+                    <span id="total-pages">0</span>
+                </span>
+                <button id="next">▶</button>
+            </div>
+            
+            <div id="toolbar">
+                <button id="toc-btn" class="tooltip">
+                    📚
+                    <span class="tooltiptext">목차</span>
+                </button>
+                <button id="search-btn-toggle" class="tooltip">
+                    🔍
+                    <span class="tooltiptext">검색/북마크</span>
+                </button>
+                
+                <div id="font-size-control">
+                    <button id="font-decrease">A-</button>
+                    <span id="font-size-display">16px</span>
+                  <button id="font-increase">A+</button>
+                </div>
+                
+                <button id="theme-toggle" class="tooltip">
+                    🌙
+                    <span class="tooltiptext">테마 변경</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // 번역 관련 전역 변수
+    let showOriginalWithTranslation = false;
+    let languageDetectorInstance = null;
+    let translatorInstance = null;
+    const showOriginalCheck = document.getElementById('show-original-check');
+
+    const baseSourceLangs = { 'ko': '한국어', 'en': '영어', 'ja': '일본어', 'zh': '중국어', 'fr': '프랑스어', 'de': '독일어', 'es': '스페인어' };
+    const targetLangs = { 'ko': '한국어', 'en': '영어', 'ja': '일본어', 'zh': '중국어', 'fr': '프랑스어', 'de': '독일어', 'es': '스페인어' };
+
+    function getLanguageName(langCode) {
+        return baseSourceLangs[langCode] || targetLangs[langCode] || `언어 코드 (${langCode})`;
+    }
+
+    // 언어 감지기 초기화
+    async function initializeLanguageDetector() {
+        if (!('LanguageDetector' in window)) {
+            console.warn('이 브라우저는 언어 감지 API를 지원하지 않습니다.');
+            return;
+        }
+
+        try {
+            console.log('언어 감지 모델 확인 중...');
+            const availability = await LanguageDetector.availability();
+
+            if (availability === 'unavailable') {
+                console.warn('언어 감지 모델을 사용할 수 없습니다.');
+                return;
+            }
+
+            if (availability === 'available') {
+                console.log('언어 감지 모델 준비 완료.');
+                languageDetectorInstance = await LanguageDetector.create();
+            } else {
+                console.log('언어 감지 모델 다운로드 시작...');
+                languageDetectorInstance = await LanguageDetector.create({
+                    monitor: (m) => {
+                        m.addEventListener('downloadprogress', (e) => {
+                            const percent = e.loaded / e.total * 100;
+                            console.log(`언어 감지 모델 다운로드 중... (${Math.round(percent)}%)`);
+                        });
+                    },
+                });
+                await languageDetectorInstance.ready;
+            }
+            
+            console.log('언어 감지기가 준비되었습니다.');
+        } catch(error) {
+            console.error('LanguageDetector 초기화 오류:', error);
+        }
+    }
+
+    // 번역 함수
+    async function translateText(textToTranslate, targetLang, onStatus, onProgress) {
+        try {
+            let sourceLang = 'auto';
+            if (languageDetectorInstance) {
+                onStatus('언어 감지 중...');
+                try {
+                    const results = await languageDetectorInstance.detect(textToTranslate);
+                    if (results && results.length > 0) {
+                        sourceLang = results[0].detectedLanguage;
+                        const confidence = Math.round(results[0].confidence * 100);
+                        onStatus(`감지된 언어: ${getLanguageName(sourceLang)} (신뢰도: ${confidence}%)`);
+                    }
+                } catch (e) {
+                    console.warn('언어 감지 실패:', e);
+                    sourceLang = 'en';
+                }
+            }
+            
+            if (sourceLang === targetLang) {
+                onStatus('출발어와 도착어가 같아 원문을 반환합니다.');
+                return textToTranslate;
+            }
+
+            if (!('Translator' in window)) {
+                throw new Error('이 브라우저는 내장 번역 API를 지원하지 않습니다.');
+            }
+            
+            onStatus('번역 모델 준비 중...');
+            
+            const translator = await Translator.create({
+                sourceLanguage: sourceLang === 'auto' ? 'en' : sourceLang,
+                targetLanguage: targetLang,
+                monitor: (m) => {
+                    m.addEventListener('downloadprogress', (e) => {
+                        const percent = e.loaded / e.total * 100;
+                        onStatus(`번역 모델 다운로드 중... (${Math.round(percent)}%)`);
+                        if (onProgress) onProgress(percent);
+                    });
+                },
+            });
+
+            await translator.ready;
+            onStatus('번역 중...');
+
+            const lines = textToTranslate.split('\n');
+            const translatedLines = await Promise.all(
+                lines.map(line => {
+                    if (line.trim() === '') {
+                        return Promise.resolve(line);
+                    }
+                    return translator.translate(line);
+                })
+            );
+
+            const result = translatedLines.join('\n');
+            onStatus('번역 완료!');
+            return result;
+
+        } catch (error) {
+            console.error("번역 오류:", error);
+            throw error;
+        }
+    }
+
+    // 메인 애플리케이션 코드
+    document.addEventListener('DOMContentLoaded', () => {
+        const dropZone = document.getElementById('drop-zone');
+        const viewer = document.getElementById('viewer');
+        const pageContent = document.getElementById('page-content');
+        const pageNumber = document.querySelector('.page-number');
+        const controls = document.getElementById('controls');
+        const pageInput = document.getElementById('page-input');
+        const totalPagesSpan = document.getElementById('total-pages');
+        const prevBtn = document.getElementById('prev');
+        const nextBtn = document.getElementById('next');
+        const targetLangSelect = document.getElementById('target-lang');
+        const translateBtn = document.getElementById('translate-btn');
+        const translationStatus = document.getElementById('translation-status');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        
+        // 사이드바 요소
+        const tocSidebar = document.getElementById('toc-sidebar');
+        const searchSidebar = document.getElementById('search-sidebar');
+        const overlay = document.getElementById('overlay');
+        const tocBtn = document.getElementById('toc-btn');
+        const searchBtnToggle = document.getElementById('search-btn-toggle');
+        const tocList = document.getElementById('toc-list');
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const searchResults = document.getElementById('search-results');
+        const addBookmarkBtn = document.getElementById('add-bookmark');
+        const bookmarkList = document.getElementById('bookmark-list');
+        
+        // 테마 및 글자 크기
+        const themeToggle = document.getElementById('theme-toggle');
+        const fontDecrease = document.getElementById('font-decrease');
+        const fontIncrease = document.getElementById('font-increase');
+        const fontSizeDisplay = document.getElementById('font-size-display');
+        const translationBar = document.getElementById('translation-bar');
+
+        let book = null;
+        let rendition = null;
+        let pages = [];
+        let currentPageIndex = 0;
+        let isTransitioning = false;
+        let originalPages = [];
+        let isTranslating = false;
+        let imageMap = new Map();
+        let bookmarks = [];
+        let currentFontSize = 16;
+        
+        // 터치 이벤트를 위한 변수
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        // 초기화
+        initializeLanguageDetector();
+        loadSettings();
+        // 드롭존에 최근 읽은 책 표시
+        showRecentBooks();
+
+// 설정 불러오기 - 전역 설정과 책별 설정 분리
+function loadSettings() {
+    const globalSettingsStr = localStorage.getItem('globalSettings');
+    if (globalSettingsStr) {
+        const globalSettings = JSON.parse(globalSettingsStr);
+        
+        if (globalSettings.theme === 'dark') {
+            document.body.classList.add('dark');
+            themeToggle.textContent = '☀️';
+        }
+        
+        currentFontSize = globalSettings.fontSize || 16;
+        document.documentElement.style.setProperty('--font-size', currentFontSize + 'px');
+        fontSizeDisplay.textContent = currentFontSize + 'px';
+        
+        // 원문 함께 보기 설정 복원
+        showOriginalWithTranslation = globalSettings.showOriginalWithTranslation || false;
+        if (showOriginalCheck) {
+            showOriginalCheck.checked = showOriginalWithTranslation;
+        }
+    }
+}
+
+// 책별 설정 로드
+function loadBookSettings() {
+    const bookId = getBookId();
+    if (!bookId) return;
+    
+    const bookSettingsStr = localStorage.getItem(`bookSettings_${bookId}`);
+    if (bookSettingsStr) {
+        const bookSettings = JSON.parse(bookSettingsStr);
+        
+        // 북마크 복원
+        bookmarks = bookSettings.bookmarks || [];
+        updateBookmarkList();
+        
+        // 마지막 페이지 위치 복원
+        if (bookSettings.lastPageIndex !== undefined && bookSettings.lastPageIndex < pages.length) {
+            setTimeout(() => {
+                displayPage(bookSettings.lastPageIndex);
+                showStatus(`마지막 읽은 위치(${bookSettings.lastPageIndex + 1}페이지)로 이동했습니다.`);
+            }, 100);
+        }
+    }
+}
+
+// EPUB 고유 ID 생성 함수
+function getBookId() {
+    if (!book || !book.packaging) return null;
+    
+    const metadata = book.packaging.metadata;
+    // 제목, 저자, 식별자를 조합하여 고유 ID 생성
+    const title = metadata.title || 'untitled';
+    const creator = metadata.creator || 'unknown';
+    const identifier = metadata.identifier || Date.now().toString();
+    
+    // 간단한 해시 함수로 고유 ID 생성
+    const bookString = `${title}-${creator}-${identifier}`;
+    let hash = 0;
+    for (let i = 0; i < bookString.length; i++) {
+        const char = bookString.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return `book_${Math.abs(hash)}`;
+}
+
+// 설정 저장 - 전역 설정과 책별 설정 분리
+function saveSettings() {
+    // 전역 설정
+    const globalSettings = {
+        theme: document.body.classList.contains('dark') ? 'dark' : 'light',
+        fontSize: currentFontSize,
+        showOriginalWithTranslation: showOriginalWithTranslation // 추가
+    };
+    localStorage.setItem('globalSettings', JSON.stringify(globalSettings));
+    
+    // 책별 설정
+    const bookId = getBookId();
+    if (bookId) {
+        const bookSettings = {
+            bookmarks: bookmarks,
+            lastPageIndex: currentPageIndex,
+            lastUpdated: new Date().toISOString(),
+            bookTitle: book.packaging?.metadata?.title || 'Unknown Book',
+            totalPages: pages.length
+        };
+        
+        localStorage.setItem(`bookSettings_${bookId}`, JSON.stringify(bookSettings));
+        
+        // 최근 읽은 책 목록 업데이트
+        updateRecentBooks(bookId);
+    }
+}
+
+// 설정 내보내기/가져오기 기능 추가
+function exportSettings() {
+    const bookId = getBookId();
+    if (!bookId) return;
+    
+    const bookSettings = {
+        bookId: bookId,
+        bookTitle: book.packaging?.metadata?.title || 'Unknown Book',
+        bookmarks: bookmarks,
+        lastPageIndex: currentPageIndex,
+        exportDate: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(bookSettings, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = `${bookSettings.bookTitle.replace(/[^a-z0-9]/gi, '_')}_settings.json`;
+    link.click();
+}
+
+function importSettings(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const importedSettings = JSON.parse(e.target.result);
+            
+            if (importedSettings.bookId === getBookId()) {
+                bookmarks = importedSettings.bookmarks || [];
+                updateBookmarkList();
+                
+                if (importedSettings.lastPageIndex !== undefined) {
+                    displayPage(importedSettings.lastPageIndex);
+                }
+                
+                saveSettings();
+                showStatus('설정을 성공적으로 가져왔습니다.');
+            } else {
+                alert('이 설정 파일은 현재 책과 일치하지 않습니다.');
+            }
+        } catch (error) {
+            alert('설정 파일을 읽을 수 없습니다.');
+        }
+    };
+    reader.readAsText(file);
+}
+
+// 최근 읽은 책 목록 관리
+function updateRecentBooks(bookId) {
+    let recentBooks = [];
+    const recentBooksStr = localStorage.getItem('recentBooks');
+    
+    if (recentBooksStr) {
+        recentBooks = JSON.parse(recentBooksStr);
+    }
+    
+    // 현재 책 정보
+    const bookInfo = {
+        id: bookId,
+        title: book.packaging?.metadata?.title || 'Unknown Book',
+        creator: book.packaging?.metadata?.creator || 'Unknown Author',
+        lastRead: new Date().toISOString(),
+        progress: Math.round((currentPageIndex / pages.length) * 100)
+    };
+    
+    // 기존 목록에서 현재 책 제거
+    recentBooks = recentBooks.filter(b => b.id !== bookId);
+    
+    // 맨 앞에 추가
+    recentBooks.unshift(bookInfo);
+    
+    // 최대 10개까지만 저장
+    if (recentBooks.length > 10) {
+        recentBooks = recentBooks.slice(0, 10);
+    }
+    
+    localStorage.setItem('recentBooks', JSON.stringify(recentBooks));
+}
+
+function restoreLastPosition() {
+    const lastPosition = localStorage.getItem('lastReadingPosition');
+    if (lastPosition) {
+        const position = JSON.parse(lastPosition);
+        const bookTitle = book.packaging?.metadata?.title || '';
+        
+        if (bookTitle === position.bookTitle && position.pageIndex < pages.length) {
+            displayPage(position.pageIndex);
+            showStatus(`마지막 읽은 위치(${position.pageIndex + 1}페이지)로 이동했습니다.`);
+        }
+    }
+}
+
+// 최근 읽은 책 목록 표시 (드롭존에 추가)
+function showRecentBooks() {
+    const recentBooksStr = localStorage.getItem('recentBooks');
+    if (!recentBooksStr) return;
+    
+    const recentBooks = JSON.parse(recentBooksStr);
+    if (recentBooks.length === 0) return;
+    
+    const recentBooksHTML = `
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+            <h3>최근 읽은 책</h3>
+            <div style="max-height: 200px; overflow-y: auto;">
+                ${recentBooks.map(book => `
+                    <div style="padding: 8px; margin: 5px 0; background: #f5f5f5; border-radius: 5px; text-align: left;">
+                        <strong>${book.title}</strong><br>
+                        <small>${book.creator} | 진행률: ${book.progress}%</small><br>
+                        <small style="color: #666;">마지막 읽은 시간: ${new Date(book.lastRead).toLocaleString()}</small>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    dropZone.insertAdjacentHTML('beforeend', recentBooksHTML);
+}
+
+// openBook 함수 수정 - 책별 설정 로드 추가
+   const openBook = async (file) => {
+            try {
+                if (rendition) {
+                    rendition.destroy();
+                }
+                if (book) {
+                    book.destroy();
+                }
+                
+                book = ePub(file);
+                await book.ready;
+                
+                dropZone.classList.add('hidden');
+                viewer.classList.remove('hidden');
+                controls.classList.remove('hidden');
+                translationBar.classList.remove('hidden'); // 번역 바 표시
+                
+                pageContent.innerHTML = '<div class="loading">책을 분석 중입니다...</div>';
+                
+                await loadAllResources();
+                await analyzePages();
+                await loadTableOfContents();
+                
+                originalPages = pages.map(page => ({...page}));
+                
+                // 책별 설정 로드
+                loadBookSettings();
+                
+                if (pages.length > 0) {
+                    pageInput.max = pages.length;
+                    totalPagesSpan.textContent = pages.length;
+                    
+                    if (currentPageIndex === 0) {
+                        await displayPage(0);
+                    }
+                } else {
+                    pageContent.innerHTML = '<div class="loading">페이지를 찾을 수 없습니다.</div>';
+                }
+                
+                addEventListeners();
+                
+            } catch (error) {
+                console.error("책 로딩 중 오류:", error);
+                alert("EPUB 파일을 로드하는 중 오류가 발생했습니다.");
+                resetUI();
+            }
+        };
+        
+        // 목차 로드
+const loadTableOfContents = async () => {
+    tocList.innerHTML = '';
+    
+    if (book.navigation && book.navigation.toc) {
+        const toc = book.navigation.toc;
+        
+        const createTocItem = (item, level = 0) => {
+            const li = document.createElement('li');
+            li.style.paddingLeft = (level * 20) + 'px';
+            li.textContent = item.label;
+            li.dataset.href = item.href;
+            li.dataset.id = item.id || '';
+            
+            li.addEventListener('click', async () => {
+                // href로 페이지 찾기
+                let targetPageIndex = -1;
+                
+                // 정확한 ID 매칭 시도
+                if (item.id) {
+                    targetPageIndex = pages.findIndex(page => 
+                        page.content.includes(`id="${item.id}"`) || 
+                        page.content.includes(`id='${item.id}'`)
+                    );
+                }
+                
+                // href의 앵커로 매칭 시도
+                if (targetPageIndex === -1 && item.href.includes('#')) {
+                    const anchor = item.href.split('#')[1];
+                    targetPageIndex = pages.findIndex(page => 
+                        page.content.includes(`id="${anchor}"`) || 
+                        page.content.includes(`id='${anchor}'`) ||
+                        page.content.includes(anchor)
+                    );
+                }
+                
+                // spine 기반 매칭
+                if (targetPageIndex === -1) {
+                    const spineItemHref = item.href.split('#')[0];
+                    for (let i = 0; i < book.spine.length; i++) {
+                        if (book.spine.get(i).href.includes(spineItemHref)) {
+                            // 해당 spine의 첫 페이지 찾기
+                            targetPageIndex = pages.findIndex(page => page.spineIndex === i);
+                            break;
+                        }
+                    }
+                }
+                
+                if (targetPageIndex !== -1) {
+                    await displayPage(targetPageIndex);
+                    closeSidebars();
+                    
+                    // 앵커가 있으면 해당 위치로 스크롤
+                    if (item.href.includes('#')) {
+                        const anchor = item.href.split('#')[1];
+                        setTimeout(() => {
+                            const element = pageContent.querySelector(`[id="${anchor}"]`);
+                            if (element) {
+                                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                        }, 100);
+                    }
+                }
+            });
+            
+            tocList.appendChild(li);
+            
+            // 하위 항목 처리
+            if (item.subitems && item.subitems.length > 0) {
+                item.subitems.forEach(subitem => {
+                    createTocItem(subitem, level + 1);
+                });
+            }
+        };
+        
+        toc.forEach(item => createTocItem(item));
+    } else {
+        // navigation.toc가 없는 경우 spine에서 생성
+        console.log('TOC가 없어 spine에서 생성합니다.');
+        
+        for (let i = 0; i < book.spine.length; i++) {
+            const item = book.spine.get(i);
+            const li = document.createElement('li');
+            li.textContent = `Chapter ${i + 1}`;
+            li.dataset.spineIndex = i;
+            
+            li.addEventListener('click', async () => {
+                const targetPageIndex = pages.findIndex(page => page.spineIndex === i);
+                if (targetPageIndex !== -1) {
+                    await displayPage(targetPageIndex);
+                    closeSidebars();
+                }
+            });
+            
+            tocList.appendChild(li);
+        }
+    }
+};
+        
+        // 모든 리소스 로드
+        const loadAllResources = async () => {
+            console.log('리소스 로딩 시작...');
+            
+            if (book.archive && book.archive.zip && book.archive.zip.files) {
+                for (let path in book.archive.zip.files) {
+                    if (path.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+                        try {
+                            const file = book.archive.zip.files[path];
+                            const blob = await file.async('blob');
+                            const blobUrl = URL.createObjectURL(blob);
+                            
+                            // 모든 가능한 경로 변형 저장
+                            imageMap.set(path, blobUrl);
+                            imageMap.set('/' + path, blobUrl);
+                            imageMap.set('../' + path, blobUrl);
+                            imageMap.set('./' + path, blobUrl);
+                            
+                            const filename = path.split('/').pop();
+                            imageMap.set(filename, blobUrl);
+                            
+                            if (path.includes('images/')) {
+                                const imagePath = path.substring(path.indexOf('images/'));
+                                imageMap.set(imagePath, blobUrl);
+                                imageMap.set('../' + imagePath, blobUrl);
+                            }
+                            
+                            console.log('이미지 로드 성공:', path);
+                        } catch (error) {
+                            console.error('이미지 로드 실패:', path, error);
+                        }
+                    }
+                }
+            }
+            
+            console.log('총', imageMap.size, '개의 이미지 로드 완료');
+        };
+        
+        const processImagesInContent = (html) => {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            
+            const images = tempDiv.querySelectorAll('img');
+            images.forEach(img => {
+                const src = img.getAttribute('src');
+                if (src && !src.startsWith('blob:') && !src.startsWith('data:')) {
+                    let blobUrl = imageMap.get(src);
+                    
+                    if (!blobUrl) {
+                        const variations = [
+                            src,
+                            src.replace(/^\.\.\//, ''),
+                            src.replace(/^\.\//, ''),
+                            src.replace(/^\//, ''),
+                            'images/' + src.split('/').pop(),
+                            src.split('/').pop()
+                        ];
+                        
+                        for (let variation of variations) {
+                            blobUrl = imageMap.get(variation);
+                            if (blobUrl) break;
+                        }
+                    }
+                    
+                    if (blobUrl) {
+                        img.setAttribute('src', blobUrl);
+                    }
+                }
+            });
+            
+            return tempDiv.innerHTML;
+        };
+        
+const analyzePages = async () => {
+    pages = [];
+    const spine = book.spine;
+    
+    for (let i = 0; i < spine.length; i++) {
+        const item = spine.get(i);
+        const doc = await item.load(book.load.bind(book));
+        
+        const pageBreaks = doc.querySelectorAll('[epub\\:type="pagebreak"]');
+        
+        if (pageBreaks.length === 0 && i === 0) {
+            const content = processImagesInContent(doc.body.innerHTML);
+            pages.push({
+                spineIndex: i,
+                pageNum: 1,
+                content: content,
+                text: doc.body.textContent // textContent는 이미지 경로를 포함하지 않음
+            });
+        } else {
+            for (let j = 0; j < pageBreaks.length; j++) {
+                const currentBreak = pageBreaks[j];
+                const pageNum = parseInt(currentBreak.getAttribute('title') || currentBreak.id.replace(/[^0-9]/g, ''), 10);
+                
+                const rawContent = extractPageContent(doc, currentBreak, pageBreaks[j + 1]);
+                const content = processImagesInContent(rawContent);
+                
+                if (content.trim()) {
+                    // 이미지가 처리된 content에서 텍스트 추출
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = content;
+                    
+                    pages.push({
+                        spineIndex: i,
+                        pageNum: pageNum || pages.length + 1,
+                        content: content,
+                        text: tempDiv.textContent // textContent 사용으로 이미지 URL 제외
+                    });
+                }
+            }
+            
+            if (pageBreaks.length > 0) {
+                const lastRawContent = extractPageContent(doc, pageBreaks[pageBreaks.length - 1], null);
+                const lastContent = processImagesInContent(lastRawContent);
+                if (lastContent.trim() && !isOnlyPagebreak(lastContent)) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = lastContent;
+                    
+                    pages.push({
+                        spineIndex: i,
+                        pageNum: pages.length + 1,
+                        content: lastContent,
+                        text: tempDiv.textContent // textContent 사용
+                    });
+                }
+            }
+        }
+    }
+    
+    pages.sort((a, b) => a.pageNum - b.pageNum);
+    console.log(`총 ${pages.length}개의 페이지를 찾았습니다.`);
+};
+        
+        const extractPageContent = (doc, startElement, endElement) => {
+            const content = [];
+            let currentElement = startElement;
+            let collecting = true;
+            
+            while (currentElement && collecting) {
+                if (currentElement === endElement) {
+                    break;
+                }
+                
+                if (currentElement.nextSibling) {
+                    currentElement = currentElement.nextSibling;
+                    
+                    if (currentElement === endElement) {
+                        break;
+                    }
+                    
+                    if (currentElement.nodeType === 1) {
+                        if (endElement && currentElement.contains(endElement)) {
+                            const clone = currentElement.cloneNode(true);
+                            const innerBreak = clone.querySelector('[epub\\:type="pagebreak"]');
+                            if (innerBreak) {
+                                innerBreak.parentNode.removeChild(innerBreak);
+                                while (innerBreak.nextSibling) {
+                                    innerBreak.parentNode.removeChild(innerBreak.nextSibling);
+                                }
+                            }
+                            content.push(clone.outerHTML);
+                            break;
+                        } else {
+                            content.push(currentElement.outerHTML);
+                        }
+                    } else if (currentElement.nodeType === 3) {
+                        const text = currentElement.textContent.trim();
+                        if (text) {
+                            content.push(text);
+                        }
+                    }
+                } else if (currentElement.parentNode) {
+                    currentElement = currentElement.parentNode;
+                } else {
+                    break;
+                }
+            }
+            
+            return content.join('\n');
+        };
+        
+        const isOnlyPagebreak = (html) => {
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            const text = temp.textContent.trim();
+            return text === '' || temp.querySelector('[epub\\:type="pagebreak"]') !== null;
+        };
+        
+        const displayPage = async (index) => {
+            if (index < 0 || index >= pages.length) return;
+            
+            currentPageIndex = index;
+            const page = pages[index];
+            
+            pageContent.innerHTML = page.content;
+            
+            pageNumber.textContent = `${page.pageNum}페이지`;
+            pageInput.value = index + 1;
+            
+            prevBtn.disabled = index === 0;
+            nextBtn.disabled = index === pages.length - 1;
+            
+            pageContent.scrollTop = 0;
+            
+            // 페이지 표시 후 높이 조정
+            setTimeout(adjustPageContentHeight, 0);
+            
+            // 목차에서 현재 위치 하이라이트
+            updateTocHighlight();
+        };
+        
+const updateTocHighlight = () => {
+    const tocItems = tocList.querySelectorAll('li');
+    tocItems.forEach(item => item.classList.remove('active'));
+    
+    // 현재 페이지에 해당하는 목차 항목 찾기
+    if (currentPageIndex < pages.length) {
+        const currentPage = pages[currentPageIndex];
+        let bestMatch = null;
+        let bestMatchIndex = -1;
+        
+        // 각 목차 항목과 현재 페이지 비교
+        tocItems.forEach((item, index) => {
+            const href = item.dataset.href;
+            if (!href) return;
+            
+            // href에서 파일명과 앵커 추출
+            const [filename, anchor] = href.split('#');
+            
+            // 현재 페이지 내용에 앵커가 포함되어 있는지 확인
+            if (anchor && currentPage.content.includes(anchor)) {
+                bestMatch = item;
+                bestMatchIndex = index;
+            }
+            
+            // 또는 현재 spine index와 비교
+            if (currentPage.spineIndex >= index && index > bestMatchIndex) {
+                bestMatch = item;
+                bestMatchIndex = index;
+            }
+        });
+        
+        if (bestMatch) {
+            bestMatch.classList.add('active');
+            // 스크롤하여 활성 항목이 보이도록
+            bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+};
+        
+const extractTextFromHTML = (html) => {
+    const temp = document.createElement('div');
+    // 이미지 요소를 제거한 후 텍스트 추출
+    temp.innerHTML = html;
+    
+    // 모든 이미지 태그 제거
+    const images = temp.querySelectorAll('img');
+    images.forEach(img => img.remove());
+    
+    const texts = [];
+    const walker = document.createTreeWalker(
+        temp,
+        NodeFilter.SHOW_TEXT,
+        {
+            acceptNode: function(node) {
+                if (node.textContent.trim() === '') {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        }
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+        texts.push({
+            text: node.textContent,
+            node: node
+        });
+    }
+    
+    return texts;
+};
+        
+// 체크박스 이벤트 리스너 추가
+showOriginalCheck.addEventListener('change', (e) => {
+    showOriginalWithTranslation = e.target.checked;
+    if (targetLangSelect.value && !isTranslating) {
+        translateCurrentPage();
+    }
+});
+
+
+ // updateHTMLWithTranslation 함수를 완전히 새로 작성
+const updateHTMLWithTranslation = (originalHTML, translations, showBoth = false) => {
+    const temp = document.createElement('div');
+    temp.innerHTML = originalHTML;
+    
+    if (!showBoth) {
+        // 기존 방식: 원문을 번역문으로 교체
+        let translationIndex = 0;
+        const walker = document.createTreeWalker(
+            temp,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    if (node.textContent.trim() === '') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {
+            if (translationIndex < translations.length) {
+                node.textContent = translations[translationIndex];
+                translationIndex++;
+            }
+        }
+    } else {
+        // 새로운 방식: 원문과 번역문을 함께 표시
+        const processNode = (element) => {
+            const childNodes = Array.from(element.childNodes);
+            
+            childNodes.forEach(child => {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    const text = child.textContent.trim();
+                    if (text) {
+                        // 해당하는 번역 찾기
+                        const textIndex = extractTextFromHTML(originalHTML)
+                            .map(t => t.text.trim())
+                            .indexOf(text);
+                        
+                        if (textIndex !== -1 && textIndex < translations.length) {
+                            const container = document.createElement('div');
+                            container.className = 'dual-lang-container';
+                            
+                            // 원문
+                            const originalDiv = document.createElement('div');
+                            originalDiv.className = 'original-text';
+                            originalDiv.innerHTML = `<span class="lang-label">원문</span><br>${text}`;
+                            
+                            // 번역문
+                            const translatedDiv = document.createElement('div');
+                            translatedDiv.className = 'translated-text';
+                            translatedDiv.innerHTML = `<span class="lang-label">${getLanguageName(targetLangSelect.value)}</span><br>${translations[textIndex]}`;
+                            
+                            container.appendChild(originalDiv);
+                            container.appendChild(translatedDiv);
+                            
+                            child.parentNode.replaceChild(container, child);
+                        }
+                    }
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    // 이미지나 다른 요소는 그대로 유지
+                    if (child.tagName !== 'IMG' && child.tagName !== 'BR') {
+                        processNode(child);
+                    }
+                }
+            });
+        };
+        
+        // 문단 단위로 처리하는 더 나은 방법
+        const paragraphs = temp.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, td, th');
+        let translationIndex = 0;
+        
+        paragraphs.forEach(para => {
+            const text = para.textContent.trim();
+            if (text && translationIndex < translations.length) {
+                const container = document.createElement('div');
+                container.className = 'dual-lang-container';
+                
+                // 원문 보존
+                const originalClone = para.cloneNode(true);
+                originalClone.classList.add('original-text');
+                
+                // 원문 라벨 추가
+                const origLabel = document.createElement('div');
+                origLabel.className = 'lang-label';
+                origLabel.textContent = '원문';
+                container.appendChild(origLabel);
+                container.appendChild(originalClone);
+                
+                // 번역문 생성
+                const translatedPara = para.cloneNode(true);
+                const textNodes = [];
+                const walker = document.createTreeWalker(
+                    translatedPara,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function(node) {
+                            return node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+                        }
+                    }
+                );
+                
+                let node;
+                while (node = walker.nextNode()) {
+                    textNodes.push(node);
+                }
+                
+                textNodes.forEach((node, idx) => {
+                    if (translationIndex + idx < translations.length) {
+                        node.textContent = translations[translationIndex + idx];
+                    }
+                });
+                
+                translationIndex += textNodes.length;
+                
+                // 번역문 라벨 추가
+                const transLabel = document.createElement('div');
+                transLabel.className = 'lang-label';
+                transLabel.textContent = getLanguageName(targetLangSelect.value);
+                container.appendChild(transLabel);
+                
+                translatedPara.classList.add('translated-text');
+                container.appendChild(translatedPara);
+                
+                // 원래 요소를 컨테이너로 교체
+                para.parentNode.replaceChild(container, para);
+            }
+        });
+    }
+    
+    return temp.innerHTML;
+};
+
+        
+        const showStatus = (message, showProgress = false) => {
+            translationStatus.textContent = message;
+            translationStatus.classList.add('show');
+            progressContainer.style.display = showProgress ? 'block' : 'none';
+        };
+        
+        const updateProgress = (percent) => {
+            progressBar.style.width = percent + '%';
+        };
+        
+// translateCurrentPage 함수 수정
+const translateCurrentPage = async () => {
+    const targetLang = targetLangSelect.value;
+    
+    if (!targetLang) {
+        pages[currentPageIndex].content = originalPages[currentPageIndex].content;
+        await displayPage(currentPageIndex);
+        return;
+    }
+    
+    if (isTranslating) return;
+    
+    isTranslating = true;
+    translateBtn.classList.add('translating');
+    translateBtn.textContent = '번역 중...';
+    translateBtn.disabled = true;
+    
+    try {
+        const textNodes = extractTextFromHTML(originalPages[currentPageIndex].content); // 항상 원본에서 추출
+        const textsToTranslate = textNodes.map(item => item.text);
+        
+        if (textsToTranslate.length === 0) {
+            showStatus('번역할 텍스트가 없습니다.');
+            return;
+        }
+        
+        const combinedText = textsToTranslate.join('\n');
+        
+        const translatedText = await translateText(
+            combinedText, 
+            targetLang,
+            (status) => showStatus(status),
+            (progress) => {
+                showStatus(`번역 모델 다운로드 중... (${Math.round(progress)}%)`, true);
+                updateProgress(progress);
+            }
+        );
+        
+        const translatedTexts = translatedText.split('\n');
+        const translatedHTML = updateHTMLWithTranslation(
+            originalPages[currentPageIndex].content,
+            translatedTexts,
+            showOriginalWithTranslation // 원문 함께 보기 옵션 전달
+        );
+        
+        pages[currentPageIndex].content = translatedHTML;
+        displayPage(currentPageIndex);
+        
+    } catch (error) {
+        console.error('번역 오류:', error);
+        showStatus(`오류: ${error.message}`);
+    } finally {
+        isTranslating = false;
+        translateBtn.classList.remove('translating');
+        translateBtn.textContent = '번역';
+        translateBtn.disabled = false;
+        
+        setTimeout(() => {
+            translationStatus.classList.remove('show');
+            progressContainer.style.display = 'none';
+            progressBar.style.width = '0%';
+        }, 3000);
+    }
+};
+
+        
+        // 검색 기능
+        const searchInBook = () => {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) return;
+            
+            searchResults.innerHTML = '';
+            
+            pages.forEach((page, index) => {
+                if (page.text && page.text.toLowerCase().includes(query)) {
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = 'search-result';
+                    
+                    // 검색어 주변 텍스트 추출
+                    const textIndex = page.text.toLowerCase().indexOf(query);
+                    const start = Math.max(0, textIndex - 50);
+                    const end = Math.min(page.text.length, textIndex + query.length + 50);
+                    const excerpt = page.text.substring(start, end);
+                    
+                    resultDiv.innerHTML = `
+                        <strong>페이지 ${index + 1}</strong><br>
+                        ...${excerpt.replace(new RegExp(query, 'gi'), '<span class="highlight">$&</span>')}...
+                    `;
+                    
+                    resultDiv.addEventListener('click', async () => {
+                        await displayPage(index);
+                        highlightSearchTerm(query);
+                        closeSidebars();
+                    });
+                    
+                    searchResults.appendChild(resultDiv);
+                }
+            });
+            
+            if (searchResults.children.length === 0) {
+                searchResults.innerHTML = '<p>검색 결과가 없습니다.</p>';
+            }
+        };
+        
+const highlightSearchTerm = (term) => {
+    // 기존 하이라이트 제거
+    const existingHighlights = pageContent.querySelectorAll('.highlight');
+    existingHighlights.forEach(el => {
+        const parent = el.parentNode;
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+    });
+    
+    // 새 하이라이트 추가
+    const walker = document.createTreeWalker(
+        pageContent,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+    );
+    
+    const textNodes = [];
+    let node;
+    while (node = walker.nextNode()) {
+        if (node.textContent.toLowerCase().includes(term.toLowerCase())) {
+            textNodes.push(node);
+        }
+    }
+    
+    textNodes.forEach(node => {
+        const parent = node.parentNode;
+        const text = node.textContent;
+        const regex = new RegExp(`(${term})`, 'gi');
+        const parts = text.split(regex);
+        
+        const fragment = document.createDocumentFragment();
+        parts.forEach((part, index) => {
+            if (index % 2 === 1) {
+                const span = document.createElement('span');
+                span.className = 'highlight';
+                span.textContent = part;
+                fragment.appendChild(span);
+            } else {
+                fragment.appendChild(document.createTextNode(part));
+            }
+        });
+        
+        parent.replaceChild(fragment, node);
+    });
+    
+    // 첫 번째 하이라이트로 스크롤
+    const firstHighlight = pageContent.querySelector('.highlight');
+    if (firstHighlight) {
+        firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+};
+
+        
+// 북마크 추가 함수 수정 - 책 정보 포함
+const addBookmark = () => {
+    const pageText = pages[currentPageIndex].text || '';
+    const preview = pageText.substring(0, 100).trim() + (pageText.length > 100 ? '...' : '');
+    
+    const bookmark = {
+        pageIndex: currentPageIndex,
+        pageNum: pages[currentPageIndex].pageNum,
+        title: `페이지 ${currentPageIndex + 1}`,
+        preview: preview,
+        timestamp: new Date().toISOString(),
+        bookId: getBookId(),
+        bookTitle: book.packaging?.metadata?.title || 'Unknown Book'
+    };
+    
+    bookmarks.push(bookmark);
+    saveSettings();
+    updateBookmarkList();
+    
+    showStatus('북마크가 추가되었습니다.');
+};
+
+        
+// 북마크 리스트 업데이트 개선
+const updateBookmarkList = () => {
+    bookmarkList.innerHTML = '';
+    
+    bookmarks.forEach((bookmark, index) => {
+        const bookmarkDiv = document.createElement('div');
+        bookmarkDiv.className = 'bookmark-item';
+        
+        const date = new Date(bookmark.timestamp);
+        const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        
+        bookmarkDiv.innerHTML = `
+            <div style="flex: 1;">
+                <strong>${bookmark.title}</strong>
+                <div style="font-size: 0.8em; color: #666; margin-top: 4px;">
+                    ${bookmark.preview || ''}
+                </div>
+                <div style="font-size: 0.7em; color: #999; margin-top: 2px;">
+                    ${dateStr}
+                </div>
+            </div>
+            <span class="bookmark-delete" data-index="${index}" style="padding: 10px;">✕</span>
+        `;
+        
+        bookmarkDiv.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('bookmark-delete')) {
+                const deleteIndex = parseInt(e.target.dataset.index);
+                if (confirm('이 북마크를 삭제하시겠습니까?')) {
+                    bookmarks.splice(deleteIndex, 1);
+                    saveSettings();
+                    updateBookmarkList();
+                    showStatus('북마크가 삭제되었습니다.');
+                }
+            } else {
+                await displayPage(bookmark.pageIndex);
+                closeSidebars();
+            }
+        });
+        
+        bookmarkList.appendChild(bookmarkDiv);
+    });
+    
+    if (bookmarks.length === 0) {
+        bookmarkList.innerHTML = '<p style="text-align: center; color: #666;">북마크가 없습니다.</p>';
+    }
+};
+        
+        // 사이드바 제어
+        const openTocSidebar = () => {
+            tocSidebar.classList.add('open');
+            overlay.classList.add('show');
+        };
+        
+        const openSearchSidebar = () => {
+            searchSidebar.classList.add('open');
+            overlay.classList.add('show');
+            updateBookmarkList();
+        };
+        
+        const closeSidebars = () => {
+            tocSidebar.classList.remove('open');
+            searchSidebar.classList.remove('open');
+            overlay.classList.remove('show');
+        };
+        
+        // 테마 변경
+        const toggleTheme = () => {
+            document.body.classList.toggle('dark');
+            themeToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+            saveSettings();
+        };
+        
+        // 글자 크기 조절
+        const changeFontSize = (delta) => {
+            currentFontSize = Math.max(12, Math.min(24, currentFontSize + delta));
+            document.documentElement.style.setProperty('--font-size', currentFontSize + 'px');
+            fontSizeDisplay.textContent = currentFontSize + 'px';
+            saveSettings();
+        };
+        
+        const nextPage = async () => {
+            if (!isTransitioning && currentPageIndex < pages.length - 1) {
+                isTransitioning = true;
+                await displayPage(currentPageIndex + 1);
+                
+                if (targetLangSelect.value && !isTranslating) {
+                    translateCurrentPage();
+                }
+                
+                setTimeout(() => { isTransitioning = false; }, 300);
+            }
+        };
+        
+        const prevPage = async () => {
+            if (!isTransitioning && currentPageIndex > 0) {
+                isTransitioning = true;
+                await displayPage(currentPageIndex - 1);
+                
+                if (targetLangSelect.value && !isTranslating) {
+                    translateCurrentPage();
+                }
+                
+                setTimeout(() => { isTransitioning = false; }, 300);
+            }
+        };
+        
+        const goToPage = async (pageNum) => {
+            const index = parseInt(pageNum) - 1;
+            if (index >= 0 && index < pages.length && index !== currentPageIndex) {
+                await displayPage(index);
+                
+                if (targetLangSelect.value && !isTranslating) {
+                    translateCurrentPage();
+                }
+            }
+        };
+        
+        const addEventListeners = () => {
+            // 페이지 네비게이션
+            document.addEventListener('keydown', handleKeyPress);
+            viewer.addEventListener('wheel', handleWheel, { passive: false });
+            viewer.addEventListener('click', handleClick);
+            viewer.addEventListener('touchstart', handleTouchStart, { passive: true });
+            viewer.addEventListener('touchend', handleTouchEnd, { passive: true });
+            viewer.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                prevPage();
+            });
+            
+            // 페이지 입력
+            pageInput.addEventListener('change', (e) => {
+                goToPage(e.target.value);
+            });
+            
+            pageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    goToPage(e.target.value);
+                }
+            });
+            
+            // 번역
+            translateBtn.addEventListener('click', translateCurrentPage);
+            targetLangSelect.addEventListener('change', () => {
+                if (!isTranslating) {
+                    translateCurrentPage();
+                }
+            });
+            
+            // 사이드바
+            tocBtn.addEventListener('click', openTocSidebar);
+            searchBtnToggle.addEventListener('click', openSearchSidebar);
+            overlay.addEventListener('click', closeSidebars);
+            
+            // 검색
+            searchBtn.addEventListener('click', searchInBook);
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    searchInBook();
+                }
+            });
+            
+            // 북마크
+            addBookmarkBtn.addEventListener('click', addBookmark);
+            
+            // 테마
+            themeToggle.addEventListener('click', toggleTheme);
+            
+            // 글자 크기
+            fontDecrease.addEventListener('click', () => changeFontSize(-2));
+            fontIncrease.addEventListener('click', () => changeFontSize(2));
+        };
+        
+const handleKeyPress = (e) => {
+            // 입력 필드에 포커스가 있으면 무시
+            if (document.activeElement.tagName === 'INPUT') return;
+            
+            switch(e.key) {
+                case 'ArrowRight':
+                case ' ':
+                    e.preventDefault();
+                    nextPage();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    prevPage();
+                    break;
+                case 'ArrowUp':
+                case 'PageUp':
+                    e.preventDefault();
+                    prevPage();
+                    break;
+                case 'ArrowDown':
+                case 'PageDown':
+                    e.preventDefault();
+                    nextPage();
+                    break;
+                case 'Home':
+                    e.preventDefault();
+                    displayPage(0);
+                    if (targetLangSelect.value && !isTranslating) {
+                        translateCurrentPage();
+                    }
+                    break;
+                case 'End':
+                    e.preventDefault();
+                    displayPage(pages.length - 1);
+                    if (targetLangSelect.value && !isTranslating) {
+                        translateCurrentPage();
+                    }
+                    break;
+                case 'b':
+                case 'B':
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        addBookmark();
+                    }
+                    break;
+                case 'f':
+                case 'F':
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        openSearchSidebar();
+                        searchInput.focus();
+                    }
+                    break;
+                case 't':
+                case 'T':
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        // 번역 언어 선택으로 포커스 이동
+                        targetLangSelect.focus();
+                    }
+                    break;
+            }
+        };
+        
+        const handleWheel = (e) => {
+            e.preventDefault();
+            
+            if (e.deltaY > 0) {
+                nextPage();
+            } else if (e.deltaY < 0) {
+                prevPage();
+            }
+        };
+        
+        const handleClick = (e) => {
+            if (e.target.tagName === 'A') {
+                return;
+            }
+            
+            const viewerRect = viewer.getBoundingClientRect();
+            const clickX = e.clientX - viewerRect.left;
+            const viewerWidth = viewerRect.width;
+            
+            if (clickX < viewerWidth * 0.3) {
+                prevPage();
+            } else if (clickX > viewerWidth * 0.7) {
+                nextPage();
+            } else {
+                nextPage();
+            }
+        };
+        
+        const handleTouchStart = (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        };
+        
+        const handleTouchEnd = (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        };
+        
+        const handleSwipe = () => {
+            const swipeThreshold = 50;
+            
+            if (touchEndX < touchStartX - swipeThreshold) {
+                nextPage();
+            } else if (touchEndX > touchStartX + swipeThreshold) {
+                prevPage();
+            }
+        };
+        
+        const cleanupBlobUrls = () => {
+            for (let [key, blobUrl] of imageMap) {
+                URL.revokeObjectURL(blobUrl);
+            }
+            imageMap.clear();
+        };
+        
+     const resetUI = () => {
+            cleanupBlobUrls();
+            
+            dropZone.classList.remove('hidden');
+            viewer.classList.add('hidden');
+            controls.classList.add('hidden');
+            translationBar.classList.add('hidden'); // 번역 바 숨김
+            tocSidebar.classList.remove('open');
+            searchSidebar.classList.remove('open');
+            overlay.classList.remove('show');
+            
+            pages = [];
+            originalPages = [];
+            currentPageIndex = 0;
+            targetLangSelect.value = '';
+            
+            tocList.innerHTML = '';
+            searchResults.innerHTML = '';
+            searchInput.value = '';
+        };
+        
+        
+                // 페이지 콘텐츠 높이 계산 수정
+        const adjustPageContentHeight = () => {
+            if (pageContent) {
+                const translationBarHeight = translationBar.classList.contains('hidden') ? 0 : translationBar.offsetHeight;
+                const controlsHeight = controls.offsetHeight;
+                const viewerMargin = 40; // 상하 마진
+                const totalHeight = window.innerHeight - translationBarHeight - controlsHeight - viewerMargin;
+                pageContent.style.height = `${totalHeight}px`;
+            }
+        };
+
+        // 드래그 앤 드롭 이벤트
+        window.addEventListener('dragover', (e) => e.preventDefault(), false);
+        window.addEventListener('drop', (e) => e.preventDefault(), false);
+        
+        dropZone.addEventListener('dragenter', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            dropZone.style.backgroundColor = '#e0e0e0';
+        });
+        
+        dropZone.addEventListener('dragleave', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            dropZone.style.backgroundColor = '';
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.style.backgroundColor = '';
+            
+            const file = e.dataTransfer?.files?.[0];
+            if (file?.name.endsWith('.epub')) {
+                openBook(file);
+            } else {
+                alert('EPUB 파일만 지원합니다.');
+            }
+        });
+        
+        // 버튼 이벤트
+        nextBtn.addEventListener('click', nextPage);
+        prevBtn.addEventListener('click', prevPage);
+        
+        // 창 크기 변경 이벤트 수정
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                adjustPageContentHeight();
+            }, 200);
+        });
+        
+        // API 지원 여부 확인
+        if (!('LanguageDetector' in window)) {
+            console.warn('Language Detector API is not supported');
+            targetLangSelect.insertAdjacentHTML('afterend', 
+                '<span style="color: #ff9800; font-size: 12px; margin-left: 10px;">⚠️ 언어 감지 미지원</span>'
+            );
+        }
+        
+        if (!('Translator' in window)) {
+            console.warn('Translator API is not supported');
+            translateBtn.disabled = true;
+            translateBtn.textContent = '번역 미지원';
+            targetLangSelect.disabled = true;
+            targetLangSelect.insertAdjacentHTML('afterend', 
+                '<span style="color: #f44336; font-size: 12px; margin-left: 10px;">❌ 번역 API 미지원</span>'
+            );
+        }
+    });
+
+// CSS 추가 - 툴팁 스타일
+        const style = document.createElement('style');
+        style.textContent = `
+            .tooltip {
+                position: relative;
+                display: inline-block;
+            }
+            
+            .tooltip .tooltiptext {
+                visibility: hidden;
+                width: 120px;
+                background-color: #555;
+                color: #fff;
+                text-align: center;
+                border-radius: 6px;
+                padding: 5px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%;
+                left: 50%;
+                margin-left: -60px;
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+            
+            .tooltip:hover .tooltiptext {
+                visibility: visible;
+                opacity: 1;
+            }
+            
+            /* 번역 바가 있을 때 viewer 마진 조정 */
+            #translation-bar:not(.hidden) ~ #viewer {
+                margin-top: 0;
+            }
+            
+            /* 모바일 반응형 */
+            @media (max-width: 768px) {
+                #translation-controls {
+                    flex-wrap: wrap;
+                    justify-content: center;
+                }
+                
+                #translation-bar {
+                    padding: 8px 10px;
+                }
+                
+                #controls {
+                    flex-wrap: wrap;
+                    padding: 10px;
+                }
+                
+                #toolbar {
+                    margin-top: 10px;
+                }
+                
+                .sidebar {
+                    width: 250px;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        
+    </script>
+</body>
+</html>
