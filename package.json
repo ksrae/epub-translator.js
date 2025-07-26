@@ -1,4 +1,19 @@
 {
+  "name": "epub-translate-local",
+  "version": "1.0.0",
+  "description": "A local EPUB reader with translation features, run with http-server.",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -c-1 -o",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "epub",
+    "reader",
+    "translate"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "http-server": "^14.1.1"
   }

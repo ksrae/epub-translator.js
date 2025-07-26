@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>드롭 테스트</title>
+    <style>
+        body { font-family: sans-serif; }
+        #drop-zone {
+            margin: 50px;
+            padding: 50px;
+            border: 3px dashed #ccc;
+            text-align: center;
+            font-size: 1.2em;
+            transition: all 0.2s;
+        }
+        #drop-zone.dragover {
+            border-color: #007bff;
+            background-color: #f0f8ff;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="drop-zone">
+        여기에 아무 파일이나 드래그 앤 드롭 해보세요.
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+
+        // 1. 브라우저 기본 동작 방지
+        window.addEventListener('dragover', e => e.preventDefault(), false);
+        window.addEventListener('drop', e => e.preventDefault(), false);
+        
+        // 2. 드롭존 이벤트 처리
+        dropZone.addEventListener('dragenter', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                console.log('파일이 성공적으로 드롭되었습니다:', file.name);
+                dropZone.textContent = `성공! 파일 이름: ${file.name}`;
+            } else {
+                console.log('파일을 가져오지 못했습니다.');
+            }
+        });
+    </script>
+
+</body>
+</html>
