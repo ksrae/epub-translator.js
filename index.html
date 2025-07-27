@@ -1400,39 +1400,74 @@ function cleanupMemory() {
 // 10분마다 메모리 정리
 setInterval(cleanupMemory, 10 * 60 * 1000);
 
-// displayPage 함수 수정 (캐시 확인 로직)
+// 기존 displayPage 함수를 이 코드로 완전히 교체하세요.
 const displayPage = (index) => {
+    // 페이지 인덱스가 유효하지 않거나, 이전 페이지 전환 효과가 진행 중이면 중단합니다.
     if (index < 0 || index >= pages.length || isTransitioning) return;
     
+    // 페이지가 넘어가는 중 다른 작업(번역 등)이 중복 실행되지 않도록 플래그를 설정합니다.
+    if (isTranslating) {
+        isTranslating = false; // 진행 중인 번역이 있다면 중단시킵니다.
+        console.log("페이지 이동으로 진행 중이던 번역을 중단합니다.");
+    }
+
     isTransitioning = true;
-    const pageContent = document.getElementById('page-content');
+    currentPageIndex = index;
     
+    const pageContent = document.getElementById('page-content');
+    const targetLang = targetLangSelect.value;
+
+    // --- 1. 캐시 확인 및 표시 ---
+    // 만약 현재 페이지에 대한 번역본이 캐시에 이미 존재한다면, 즉시 캐시된 내용을 보여주고 함수를 종료합니다.
+    if (targetLang && translatedCache[currentPageIndex] && translatedCache[currentPageIndex][targetLang]) {
+        console.log(`[캐시 히트] 페이지 ${index + 1}의 '${targetLang}' 번역본을 로드합니다.`);
+        pageContent.innerHTML = translatedCache[currentPageIndex][targetLang];
+        updateCommonUI(index);
+        isTransitioning = false; // 전환 완료
+        return; // 여기서 함수 실행 종료
+    }
+
+    // --- 2. 원문 표시 (애니메이션과 함께) ---
     // 페이지 아웃 효과
     pageContent.classList.add('page-transition-out');
     
     setTimeout(() => {
-        currentPageIndex = index;
-        const pageData = pages[currentPageIndex];
+        // 원본 페이지 데이터를 가져옵니다.
+        const pageData = originalPages[currentPageIndex];
+        if (!pageData) {
+            console.error(`페이지 ${currentPageIndex + 1}의 원본 데이터를 찾을 수 없습니다.`);
+            isTransitioning = false;
+            return;
+        }
         
-        // 페이지 내용 교체
+        // 페이지 내용을 원문으로 교체합니다.
         pageContent.innerHTML = pageData.content;
         
-        // UI 업데이트
+        // 페이지 번호 등 공통 UI를 업데이트합니다.
         updateCommonUI(index);
 
         // 페이지 인 효과
         pageContent.classList.remove('page-transition-out');
         pageContent.classList.add('page-transition-in');
         
+        // 페이지 전환 애니메이션이 끝난 후 다음 작업을 진행합니다.
         setTimeout(() => {
             pageContent.classList.remove('page-transition-in');
-            isTransitioning = false;
-        }, 200);
+            isTransitioning = false; // 페이지 표시 전환 완료
 
-    }, 200); // fade-out 시간
+            // --- 3. 자동 번역 실행 ---
+            // 만약 번역 언어가 설정되어 있다면('원문'이 아니라면),
+            // 자동으로 번역 함수를 호출합니다.
+            if (targetLang) {
+                console.log(`페이지 ${currentPageIndex + 1} 로딩 완료. 자동 번역('${targetLang}')을 시작합니다.`);
+                // translateCurrentPage 함수는 내부적으로 isTranslating 플래그를 관리합니다.
+                translateCurrentPage();
+            }
+
+        }, 200); // fade-in 애니메이션 시간
+
+    }, 200); // fade-out 애니메이션 시간
 };
-
-
 
 // UI 업데이트 헬퍼 함수 (이전과 동일, 없으면 추가해주세요)
 function updateCommonUI(index) {
