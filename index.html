@@ -747,8 +747,8 @@ body.dark .highlight {
     }
 
 // ★★★ 스트리밍을 위한 새로운 '단일 노드 번역' 함수 ★★★
-async function translateSingleNode(textToTranslate, targetLang) {
-    // 텍스트가 비어있으면 번역 시도하지 않음
+// 기존 translateSingleNode 함수를 이 코드로 완전히 교체하세요.
+async function translateSingleNode(textToTranslate, sourceLang, targetLang) {
     if (!textToTranslate.trim()) {
         return textToTranslate;
     }
@@ -758,26 +758,26 @@ async function translateSingleNode(textToTranslate, targetLang) {
             throw new Error('이 브라우저는 내장 번역 API를 지원하지 않습니다.');
         }
 
-        // 언어 감지는 전체 텍스트가 아니므로 'auto' 또는 기본 언어로 설정
-        const sourceLang = 'auto';
+        // ★★★ 핵심 수정: 'auto' 대신, 상위 함수에서 감지한 sourceLang을 직접 사용합니다. ★★★
+        // sourceLang이 유효하지 않은 경우(감지 실패 등) 'en'을 기본값으로 사용합니다.
+        const validSourceLang = sourceLang && sourceLang !== 'und' ? sourceLang : 'en';
 
-        // Translator 인스턴스 생성 또는 재사용 (성능을 위해 재사용 가능하게 만들 수 있음)
         const translator = await Translator.create({
-            sourceLanguage: sourceLang,
+            sourceLanguage: validSourceLang,
             targetLanguage: targetLang
         });
         
         await translator.ready;
-
         return await translator.translate(textToTranslate);
 
     } catch (error) {
-        console.error(`단일 노드 번역 오류: "${textToTranslate.substring(0, 20)}..."`, error);
-        // 오류 발생 시 원본 텍스트 반환
+        // 오류 로그를 더 상세하게 남깁니다.
+        console.error(`단일 노드 번역 오류 (from: ${sourceLang}, to: ${targetLang}): "${textToTranslate.substring(0, 20)}..."`, error);
         return textToTranslate; 
     }
 }
-    // 번역 함수
+
+// 번역 함수
     async function translateText(textToTranslate, targetLang, onStatus, onProgress) {
         try {
             let sourceLang = 'auto';
@@ -1520,28 +1520,51 @@ function processImages(html, htmlDir) {
     return tempDiv.innerHTML;
 }
 
-// 기존 paginateContent 함수를 아래 코드로 완전히 교체합니다.
+// 기존 paginateContent 함수를 이 코드로 완전히 교체하세요.
 async function paginateContent(allContent, pageContent) {
     return new Promise((resolve) => {
-        // --- 1. 페이지 크기 결정 ---
-        // 책에서 정의한 이상적인 페이지 높이 (예: 900px, 실제로는 책 메타데이터에서 가져와야 함)
-        const idealPageHeight = 900; 
-        const pageContentRect = pageContent.getBoundingClientRect();
-        // 뷰어의 높이가 이상적인 높이보다 작으면 뷰어 높이를, 아니면 이상적인 높이를 사용
-        const targetPageHeight = Math.min(idealPageHeight, pageContentRect.height);
+        // --- 1. 페이지 크기(높이) 동적 결정 ---
 
-        // --- 2. 보이지 않는 컨테이너에서 내용 렌더링 및 측정 ---
+        // ★★★ 요구사항 1: 한 페이지의 기준으로 삼을 '줄(line)의 수'를 정의합니다. ★★★
+        // 이 값이 페이지의 밀도를 결정합니다. 값이 클수록 페이지에 내용이 빽빽해집니다.
+        const LINES_PER_PAGE = 20;
+
+        // 현재 뷰어에 적용된 스타일에서 '줄 높이(line-height)' 값을 가져옵니다.
+        const computedStyle = getComputedStyle(pageContent);
+        const lineHeightString = computedStyle.lineHeight;
+        
+        // 'line-height'가 'normal'이거나 단위가 없는 경우를 대비해 폰트 크기 기반으로 계산합니다.
+        let lineHeight = parseFloat(lineHeightString);
+        if (isNaN(lineHeight)) { // 'normal'인 경우
+            // 'normal'은 보통 폰트 크기의 1.2배 정도입니다.
+            lineHeight = parseFloat(computedStyle.fontSize) * 1.2;
+        } else if (!lineHeightString.endsWith('px')) { // 단위가 없는 경우 (e.g., 1.6)
+            lineHeight = lineHeight * parseFloat(computedStyle.fontSize);
+        }
+
+        // ★★★ 요구사항 2: 이상적인 페이지 높이를 동적으로 계산합니다. ★★★
+        // 이상적인 높이 = (페이지당 줄 수) * (한 줄의 높이)
+        const idealPageHeight = LINES_PER_PAGE * lineHeight;
+
+        // 사용자의 현재 브라우저 뷰포트에서 실제 콘텐츠가 표시될 영역의 높이를 가져옵니다.
+        const viewportHeight = pageContent.clientHeight;
+
+        // ★★★ 요구사항 3: 최종 페이지 높이를 결정합니다. ★★★
+        const targetPageHeight = Math.min(idealPageHeight, viewportHeight);
+
+        console.log(`페이지 분할 기준: 페이지당 줄 수=${LINES_PER_PAGE}, 줄 높이=${lineHeight.toFixed(2)}px, 이상적 높이=${idealPageHeight.toFixed(2)}px, 뷰포트 높이=${viewportHeight}px -> 최종 기준 높이=${targetPageHeight.toFixed(2)}px`);
+
+        // --- 2. 보이지 않는 임시 컨테이너에서 내용 렌더링 및 측정 ---
         const tempContainer = document.createElement('div');
         tempContainer.style.cssText = `
             position: absolute;
             top: -9999px;
             left: 0;
-            width: ${pageContentRect.width}px;
+            width: ${pageContent.clientWidth}px;
             visibility: hidden;
-            font-family: ${getComputedStyle(pageContent).fontFamily};
-            font-size: ${getComputedStyle(pageContent).fontSize};
-            line-height: ${getComputedStyle(pageContent).lineHeight};
-            padding: ${getComputedStyle(pageContent).padding};
+            font: ${computedStyle.font};
+            padding: ${computedStyle.padding};
+            line-height: ${computedStyle.lineHeight};
         `;
         tempContainer.innerHTML = allContent;
         document.body.appendChild(tempContainer);
@@ -1554,37 +1577,27 @@ async function paginateContent(allContent, pageContent) {
         // --- 3. 요소 단위로 높이를 더해가며 페이지 분할 ---
         allElements.forEach(element => {
             const elementHeight = element.offsetHeight;
-            // 현재 요소를 추가하면 페이지 높이를 초과하는가?
             if (currentPageHeight > 0 && currentPageHeight + elementHeight > targetPageHeight) {
-                // 페이지 완성, 배열에 추가
                 pages.push({ content: currentPageHTML });
-                // 새 페이지 시작
                 currentPageHTML = element.outerHTML;
                 currentPageHeight = elementHeight;
             } else {
-                // 현재 페이지에 요소 추가
                 currentPageHTML += element.outerHTML;
                 currentPageHeight += elementHeight;
             }
         });
 
-        // 마지막 페이지 추가
         if (currentPageHTML.trim()) {
             pages.push({ content: currentPageHTML });
         }
         
-        // 임시 컨테이너 제거
         document.body.removeChild(tempContainer);
-        
-        // 원본 페이지 백업
         originalPages = JSON.parse(JSON.stringify(pages));
-
         console.log(`페이지 분할 완료: 총 ${pages.length} 페이지`);
         
         resolve();
     });
 }
-
 
         // 목차 로드
 const loadTableOfContents = async () => {
@@ -1973,34 +1986,62 @@ const updateHTMLWithTranslation = (originalHTML, translations, showBoth = false)
         };
         
 // translateCurrentPage 함수를 스트리밍 방식으로 전면 수정
+// 기존 translateCurrentPage 함수를 이 코드로 완전히 교체하세요.
 const translateCurrentPage = async () => {
     const targetLang = targetLangSelect.value;
 
-    if (!targetLang || isTranslating || (translatedCache[currentPageIndex] && translatedCache[currentPageIndex][targetLang])) {
-        return;
-    }
-    if (!originalPages || !originalPages[currentPageIndex]) {
-        return;
-    }
+    if (!targetLang || isTranslating) return;
+    if (!originalPages || !originalPages[currentPageIndex]) return;
 
+    // --- 요구사항: 번역 버튼 상태 변경 ---
     isTranslating = true;
     translateBtn.classList.add('translating');
     translateBtn.textContent = '번역 중...';
     translateBtn.disabled = true;
 
-    // 1. 원본을 먼저 화면에 그리고 시작
+    // --- 1. 페이지 콘텐츠 준비 및 언어 감지 ---
     const pageContentContainer = document.getElementById('page-content');
-    pageContentContainer.innerHTML = originalPages[currentPageIndex].content;
+    const originalContent = originalPages[currentPageIndex].content;
+    pageContentContainer.innerHTML = originalContent;
 
-    // 2. 번역할 텍스트 노드를 찾아 임시 span 태그로 감싸기 (★★★★★ 핵심 로직 ★★★★★)
+    // TreeWalker를 사용해 순수 텍스트만 추출합니다.
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = originalContent;
+    const pageText = tempDiv.textContent || '';
+    
+    let detectedSourceLang = 'en'; // 기본값 설정
+    if (languageDetectorInstance && pageText.trim()) {
+        try {
+            showStatus('언어 감지 중...');
+            const results = await languageDetectorInstance.detect(pageText);
+            if (results && results.length > 0 && results[0].confidence > 0.5) {
+                detectedSourceLang = results[0].language;
+                console.log(`페이지 언어 감지 완료: ${getLanguageName(detectedSourceLang)}`);
+            }
+        } catch(e) {
+            console.warn('페이지 언어 감지 실패. 기본 언어(en)를 사용합니다.', e);
+        }
+    }
+
+    // 출발어와 도착어가 같으면 번역하지 않음
+    if (detectedSourceLang === targetLang) {
+        showStatus('원문과 번역 언어가 같습니다.');
+        // 상태 초기화
+        isTranslating = false;
+        translateBtn.classList.remove('translating');
+        translateBtn.textContent = '번역';
+        translateBtn.disabled = false;
+        setTimeout(() => translationStatus.classList.remove('show'), 2000);
+        return;
+    }
+
+    // --- 2. 번역할 텍스트 노드에 플레이스홀더 설정 ---
     const placeholders = [];
     const walker = document.createTreeWalker(pageContentContainer, NodeFilter.SHOW_TEXT, {
         acceptNode: (node) => (node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT)
     });
-
     const nodesToWrap = [];
     while(walker.nextNode()) nodesToWrap.push(walker.currentNode);
-
     nodesToWrap.forEach((node, i) => {
         const placeholder = document.createElement('span');
         placeholder.id = `translation-placeholder-${i}`;
@@ -2011,47 +2052,46 @@ const translateCurrentPage = async () => {
 
     if (placeholders.length === 0) {
         isTranslating = false;
-        translateBtn.classList.remove('translating');
-        translateBtn.textContent = '번역';
-        translateBtn.disabled = false;
+        // ... (버튼 상태 초기화 로직)
         return;
     }
 
+    // --- 3. 스트리밍 번역 실행 ---
     try {
-        // 3. 순서대로 span 태그를 찾아 번역하고 내용 교체
-        for (const placeholder of placeholders) {
+        for (const [index, placeholder] of placeholders.entries()) {
             if (!isTranslating || !document.body.contains(placeholder)) break;
 
             const originalText = placeholder.textContent;
-            showStatus(`'${originalText.substring(0, 15)}...' 번역 중...`);
+            showStatus(`번역 중... (${index + 1}/${placeholders.length})`);
 
-            const translatedText = await translateSingleNode(originalText, targetLang);
+            // ★★★ 핵심: 감지된 언어(detectedSourceLang)를 전달합니다. ★★★
+            const translatedText = await translateSingleNode(originalText, detectedSourceLang, targetLang);
 
             if (!isTranslating || targetLangSelect.value !== targetLang) break;
 
-            // ★★★★★ 번역된 내용으로 placeholder의 innerHTML을 교체 ★★★★★
             if (showOriginalWithTranslation) {
                 const dualLangHTML = 
                     `<div class="dual-lang-container" style="display: inline-block; width: 100%;">`+
                         `<div class="original-text"><span class="lang-label">원문</span> ${originalText}</div>`+
                         `<div class="translated-text"><span class="lang-label">${getLanguageName(targetLang)}</span> ${translatedText}</div>`+
                     `</div>`;
-                placeholder.outerHTML = dualLangHTML; // span을 div 컨테이너로 교체
+                placeholder.outerHTML = dualLangHTML;
             } else {
                 placeholder.textContent = translatedText;
             }
         }
 
-        // 4. 모든 번역이 끝나면 최종 HTML을 캐시에 저장
+        // --- 4. 번역 완료 후 캐시 저장 및 상태 초기화 ---
         if (isTranslating) {
+            showStatus('번역 완료!');
             if (!translatedCache[currentPageIndex]) translatedCache[currentPageIndex] = {};
-            // 최종적으로 정리된 HTML을 캐시에 저장
-            translatedCache[currentPageIndex][targetLang] = pageContentContainer.innerHTML.replace(/<span id="translation-placeholder-\d+">/g, '').replace(/<\/span>(?=<div class="dual-lang-container">)/g, '');
+            translatedCache[currentPageIndex][targetLang] = pageContentContainer.innerHTML;
             console.log(`[캐시 저장] 페이지 ${currentPageIndex + 1}의 '${targetLang}' 번역 결과를 저장했습니다.`);
         }
 
     } catch (error) {
         console.error('스트리밍 번역 중 오류:', error);
+        showStatus('번역 중 오류가 발생했습니다.');
         if(originalPages[currentPageIndex]) pageContentContainer.innerHTML = originalPages[currentPageIndex].content;
     } finally {
         isTranslating = false;
