@@ -1140,28 +1140,35 @@ function showRecentBooks() {
     dropZone.insertAdjacentHTML('beforeend', recentBooksHTML);
 }
 
-// openBook 함수 수정 - 책별 설정 로드 추가
+
+// ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+// ★★★ 이전 답변에서 수정한 openBook, processBookWithWorker 함수가 여기에 포함되어 있습니다 ★★★
+// ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 const openBook = async (file) => {
+    console.log('[1/5] openBook 시작. 파일:', file.name);
     try {
-        if (book) book.destroy();
+        if (book) {
+            book.destroy();
+            console.log('이전 책 인스턴스 정리 완료.');
+        }
         pageContent.innerHTML = '';
-        
-        // ★★★ 캐시 초기화 로직 추가 ★★★
         translatedCache = {};
-        console.log("새로운 책을 열어 번역 캐시를 초기화합니다.");
         
+        console.log('[2/5] UI 초기화 중...');
         dropZone.classList.add('hidden');
         viewer.classList.remove('hidden');
         controls.classList.add('hidden'); 
         translationBar.classList.add('hidden'); 
         pageContent.innerHTML = '<div class="loading" id="loading-status">EPUB 파일 분석 중...</div>';
-
-        // 웹워커를 사용하여 백그라운드에서 파일 분석
+        
+        console.log('[3/5] 웹 워커로 파일 분석을 요청합니다...');
         await processBookWithWorker(file);
 
+        console.log('[5/5] 책 로딩 및 초기화 성공! UI를 완전히 활성화합니다.');
+
     } catch (error) {
-        console.error("책 로딩 중 오류:", error);
-        alert("EPUB 파일을 로드하는 중 오류가 발생했습니다: " + error.message);
+        console.error("!!!!!!!!! 책 로딩 과정에서 심각한 오류 발생 !!!!!!!!!!:", error);
+        alert("EPUB 파일을 여는 데 실패했습니다: " + error.message + "\n\nF12를 눌러 개발자 콘솔을 확인해주세요.");
         resetUI();
     }
 };
@@ -1176,33 +1183,30 @@ async function processBookWithWorker(file) {
             if (status === 'progress') {
                 const loadingStatus = document.getElementById('loading-status');
                 if (loadingStatus) loadingStatus.textContent = message;
-                
             } else if (status === 'success_raw_strings') {
+                console.log('[4/5] 워커로부터 분석 데이터를 성공적으로 수신했습니다. 책 데이터 초기화를 시작합니다...');
                 worker.terminate();
                 try {
                     await initializeBookFromRawData(payload, file);
                     resolve();
                 } catch (error) {
+                    console.error("initializeBookFromRawData 함수 내부에서 오류 발생:", error);
                     reject(error);
                 }
-                
             } else if (status === 'error') {
+                console.error("워커로부터 오류 메시지 수신:", message);
                 worker.terminate();
                 reject(new Error(message));
             }
         };
         
         worker.onerror = (error) => {
+            console.error("웹 워커 자체에서 오류 발생 (e.g., 스크립트 로드 실패):", error);
             worker.terminate();
             reject(error);
         };
         
-        // 웹워커에 파일 전송
-        worker.postMessage({
-            file: file,
-            clientWidth: pageContent.clientWidth,
-            clientHeight: pageContent.clientHeight
-        });
+        worker.postMessage({ file: file });
     });
 }
 
@@ -2053,10 +2057,10 @@ const translateCurrentPage = async () => {
             // ★★★★★ 번역된 내용으로 placeholder의 innerHTML을 교체 ★★★★★
             if (showOriginalWithTranslation) {
                 const dualLangHTML = 
-                    <div class="dual-lang-container" style="display: inline-block; width: 100%;">
-                        <div class="original-text"><span class="lang-label">원문</span> ${originalText}</div>
-                        <div class="translated-text"><span class="lang-label">${getLanguageName(targetLang)}</span> ${translatedText}</div>
-                    </div>;
+                    `<div class="dual-lang-container" style="display: inline-block; width: 100%;">`+
+                        `<div class="original-text"><span class="lang-label">원문</span> ${originalText}</div>`+
+                        `<div class="translated-text"><span class="lang-label">${getLanguageName(targetLang)}</span> ${translatedText}</div>`+
+                    `</div>`;
                 placeholder.outerHTML = dualLangHTML; // span을 div 컨테이너로 교체
             } else {
                 placeholder.textContent = translatedText;

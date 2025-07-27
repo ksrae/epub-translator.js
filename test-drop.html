@@ -4,61 +4,72 @@
     <meta charset="UTF-8">
     <title>드롭 테스트</title>
     <style>
-        body { font-family: sans-serif; }
-        #drop-zone {
-            margin: 50px;
-            padding: 50px;
-            border: 3px dashed #ccc;
-            text-align: center;
-            font-size: 1.2em;
-            transition: all 0.2s;
+        body { 
+            font-family: sans-serif; 
+            background-color: #f0f0f0; 
+            margin: 0; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
         }
-        #drop-zone.dragover {
-            border-color: #007bff;
-            background-color: #f0f8ff;
+        #drop-area {
+            width: 80%;
+            height: 80%;
+            border: 4px dashed #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 24px;
+            color: #666;
+            transition: all 0.3s;
+        }
+        #drop-area.drag-over {
+            border-color: #4CAF50;
+            background-color: #e8f5e9;
         }
     </style>
 </head>
 <body>
 
-    <div id="drop-zone">
-        여기에 아무 파일이나 드래그 앤 드롭 해보세요.
-    </div>
+<div id="drop-area">
+    <p>이곳에 아무 파일이나 드래그 앤 드롭 해보세요.<br><br>
+    성공: "드롭 성공!" 알림창이 떠야 합니다.<br>
+    실패: 파일이 다운로드되거나 새 탭에서 열립니다.</p>
+</div>
 
-    <script>
-        const dropZone = document.getElementById('drop-zone');
+<script>
+    const dropArea = document.getElementById('drop-area');
 
-        // 1. 브라우저 기본 동작 방지
-        window.addEventListener('dragover', e => e.preventDefault(), false);
-        window.addEventListener('drop', e => e.preventDefault(), false);
-        
-        // 2. 드롭존 이벤트 처리
-        dropZone.addEventListener('dragenter', e => {
-            e.stopPropagation();
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-        
-        dropZone.addEventListener('dragleave', e => {
-            e.stopPropagation();
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-        });
+    // ★★★ 핵심: 브라우저의 기본 동작을 막는 코드 ★★★
 
-        dropZone.addEventListener('drop', e => {
-            e.stopPropagation();
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            
-            const file = e.dataTransfer.files[0];
-            if (file) {
-                console.log('파일이 성공적으로 드롭되었습니다:', file.name);
-                dropZone.textContent = `성공! 파일 이름: ${file.name}`;
-            } else {
-                console.log('파일을 가져오지 못했습니다.');
-            }
-        });
-    </script>
+    // 1. dragover: 드롭을 허용하기 위해 기본 동작을 막습니다. (필수)
+    window.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropArea.classList.add('drag-over'); // 시각적 피드백
+    }, false);
+
+    window.addEventListener('dragleave', function(e) {
+        dropArea.classList.remove('drag-over'); // 시각적 피드백
+    }, false);
+
+    // 2. drop: 파일이 드롭되었을 때 다운로드되는 것을 막고, 우리가 원하는 동작을 실행합니다. (필수)
+    window.addEventListener('drop', function(e) {
+        e.preventDefault(); // <<< 이 코드가 다운로드를 막습니다!
+        dropArea.classList.remove('drag-over');
+
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            alert(`'${file.name}' 파일 드롭 성공! (다운로드 안됨)`);
+            console.log("드롭 이벤트가 성공적으로 캡처되었고, 기본 동작이 방지되었습니다.");
+        } else {
+            alert("파일 드롭 성공! (다운로드 안됨)");
+        }
+
+    }, false);
+
+</script>
 
 </body>
 </html>
