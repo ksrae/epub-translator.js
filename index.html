@@ -695,6 +695,20 @@ body.dark .highlight {
 
     <script>
     // 번역 관련 전역 변수
+    const appState = {
+        linesPerPageConfig: {
+            desktop: 20, // 데스크톱 기본 라인 수
+            tablet: 16,  // 태블릿 기본 라인 수
+            mobile: 12   // 모바일 기본 라인 수
+        },
+        breakpoints: {
+            tablet: 1024, // 1024px 이하 태블릿
+            mobile: 768   // 768px 이하 모바일
+        },
+        isDualView: false,   // '원문과 함께 보기' 상태
+        currentLinesPerPage: 20 // 현재 계산된 페이지당 라인 수
+    };
+
     let wheelTimeout;
     let showOriginalWithTranslation = false;
     let languageDetectorInstance = null;
@@ -703,6 +717,34 @@ body.dark .highlight {
 
     const baseSourceLangs = { 'ko': '한국어', 'en': '영어', 'ja': '일본어', 'zh': '중국어', 'fr': '프랑스어', 'de': '독일어', 'es': '스페인어' };
     const targetLangs = { 'ko': '한국어', 'en': '영어', 'ja': '일본어', 'zh': '중국어', 'fr': '프랑스어', 'de': '독일어', 'es': '스페인어' };
+
+    // ★★★ [2단계] 현재 상태에 따라 페이지당 라인 수를 계산하는 함수들 추가 ★★★
+
+    /**
+     * 현재 화면 너비를 기준으로 'mobile', 'tablet', 'desktop'을 반환합니다.
+     */
+    function getDeviceType() {
+        const width = window.innerWidth;
+        if (width <= appState.breakpoints.mobile) return 'mobile';
+        if (width <= appState.breakpoints.tablet) return 'tablet';
+        return 'desktop';
+    }
+
+    /**
+     * 최종적으로 적용될 페이지당 라인 수를 계산하고 appState를 업데이트합니다.
+     */
+    function calculateAndUpdateLinesPerPage() {
+        const deviceType = getDeviceType();
+        let baseLines = appState.linesPerPageConfig[deviceType];
+
+        // '원문과 함께 보기'가 활성화되면 라인 수를 절반으로 줄입니다.
+        if (appState.isDualView) {
+            baseLines = Math.floor(baseLines / 2);
+        }
+
+        appState.currentLinesPerPage = baseLines;
+        console.log(`페이지 구성 업데이트: Device=${deviceType}, DualView=${appState.isDualView} -> 페이지당 ${appState.currentLinesPerPage}라인`);
+    }
 
     function getLanguageName(langCode) {
         return baseSourceLangs[langCode] || targetLangs[langCode] || `언어 코드 (${langCode})`;
@@ -931,24 +973,34 @@ async function translateSingleNode(textToTranslate, sourceLang, targetLang) {
 
 // 설정 불러오기 - 전역 설정과 책별 설정 분리
 function loadSettings() {
+    // localStorage에서 전역 설정 문자열을 가져옵니다.
     const globalSettingsStr = localStorage.getItem('globalSettings');
+
+    // 설정이 존재하는 경우에만 로직을 실행합니다.
     if (globalSettingsStr) {
+        // 문자열을 JSON 객체로 파싱합니다.
         const globalSettings = JSON.parse(globalSettingsStr);
         
+        // 테마 설정을 적용합니다.
         if (globalSettings.theme === 'dark') {
             document.body.classList.add('dark');
             themeToggle.textContent = '☀️';
         }
         
+        // 글자 크기 설정을 적용합니다.
         currentFontSize = globalSettings.fontSize || 16;
         document.documentElement.style.setProperty('--font-size', currentFontSize + 'px');
         fontSizeDisplay.textContent = currentFontSize + 'px';
         
-        // 원문 함께 보기 설정 복원
+        // '원문과 함께 보기' 설정을 복원합니다.
         showOriginalWithTranslation = globalSettings.showOriginalWithTranslation || false;
         if (showOriginalCheck) {
             showOriginalCheck.checked = showOriginalWithTranslation;
         }
+
+        // ★★★ 핵심 수정: 로드된 설정을 appState에도 동기화합니다. ★★★
+        // 이 부분이 페이지 재구성(re-pagination) 로직이 올바르게 동작하는 데 필수적입니다.
+        appState.isDualView = showOriginalWithTranslation;
     }
 }
 
@@ -1555,36 +1607,26 @@ function processImages(html, htmlDir) {
     return tempDiv.innerHTML;
 }
 
-// 기존 paginateContent 함수를 이 코드로 완전히 교체하세요.
+// ★★★ [3단계] paginateContent 함수를 동적으로 수정 (기존 함수와 교체) ★★★
 async function paginateContent(allContent, pageContent) {
     return new Promise((resolve) => {
         // --- 1. 페이지 크기(높이) 동적 결정 ---
+        
+        // ★★★ 핵심 수정: 고정값 대신 appState에서 현재 라인 수를 가져옵니다. ★★★
+        const LINES_PER_PAGE = appState.currentLinesPerPage;
 
-        // ★★★ 요구사항 1: 한 페이지의 기준으로 삼을 '줄(line)의 수'를 정의합니다. ★★★
-        // 이 값이 페이지의 밀도를 결정합니다. 값이 클수록 페이지에 내용이 빽빽해집니다.
-        const LINES_PER_PAGE = 20;
-
-        // 현재 뷰어에 적용된 스타일에서 '줄 높이(line-height)' 값을 가져옵니다.
         const computedStyle = getComputedStyle(pageContent);
         const lineHeightString = computedStyle.lineHeight;
         
-        // 'line-height'가 'normal'이거나 단위가 없는 경우를 대비해 폰트 크기 기반으로 계산합니다.
         let lineHeight = parseFloat(lineHeightString);
-        if (isNaN(lineHeight)) { // 'normal'인 경우
-            // 'normal'은 보통 폰트 크기의 1.2배 정도입니다.
+        if (isNaN(lineHeight)) {
             lineHeight = parseFloat(computedStyle.fontSize) * 1.2;
-        } else if (!lineHeightString.endsWith('px')) { // 단위가 없는 경우 (e.g., 1.6)
+        } else if (!lineHeightString.endsWith('px')) {
             lineHeight = lineHeight * parseFloat(computedStyle.fontSize);
         }
-
-        // ★★★ 요구사항 2: 이상적인 페이지 높이를 동적으로 계산합니다. ★★★
-        // 이상적인 높이 = (페이지당 줄 수) * (한 줄의 높이)
+        
         const idealPageHeight = LINES_PER_PAGE * lineHeight;
-
-        // 사용자의 현재 브라우저 뷰포트에서 실제 콘텐츠가 표시될 영역의 높이를 가져옵니다.
         const viewportHeight = pageContent.clientHeight;
-
-        // ★★★ 요구사항 3: 최종 페이지 높이를 결정합니다. ★★★
         const targetPageHeight = Math.min(idealPageHeight, viewportHeight);
 
         console.log(`페이지 분할 기준: 페이지당 줄 수=${LINES_PER_PAGE}, 줄 높이=${lineHeight.toFixed(2)}px, 이상적 높이=${idealPageHeight.toFixed(2)}px, 뷰포트 높이=${viewportHeight}px -> 최종 기준 높이=${targetPageHeight.toFixed(2)}px`);
@@ -1604,7 +1646,8 @@ async function paginateContent(allContent, pageContent) {
         tempContainer.innerHTML = allContent;
         document.body.appendChild(tempContainer);
         
-        pages = []; // 페이지 배열 초기화
+        pages = [];
+        originalPages = []; // 원본 페이지도 함께 초기화
         const allElements = Array.from(tempContainer.children);
         let currentPageHTML = '';
         let currentPageHeight = 0;
@@ -1613,7 +1656,9 @@ async function paginateContent(allContent, pageContent) {
         allElements.forEach(element => {
             const elementHeight = element.offsetHeight;
             if (currentPageHeight > 0 && currentPageHeight + elementHeight > targetPageHeight) {
-                pages.push({ content: currentPageHTML });
+                const pageData = { content: currentPageHTML };
+                pages.push(pageData);
+                originalPages.push(JSON.parse(JSON.stringify(pageData))); // 원본 페이지 저장
                 currentPageHTML = element.outerHTML;
                 currentPageHeight = elementHeight;
             } else {
@@ -1623,15 +1668,56 @@ async function paginateContent(allContent, pageContent) {
         });
 
         if (currentPageHTML.trim()) {
-            pages.push({ content: currentPageHTML });
+            const pageData = { content: currentPageHTML };
+            pages.push(pageData);
+            originalPages.push(JSON.parse(JSON.stringify(pageData))); // 마지막 원본 페이지 저장
         }
         
         document.body.removeChild(tempContainer);
-        originalPages = JSON.parse(JSON.stringify(pages));
         console.log(`페이지 분할 완료: 총 ${pages.length} 페이지`);
         
         resolve();
     });
+}
+
+// ★★★ [4단계] 페이지를 다시 계산하고 표시하는 메인 함수 추가 ★★★
+async function rePaginateAndDisplay() {
+    // 책이 로드되지 않았으면 아무 작업도 하지 않음
+    if (!book || originalPages.length === 0) return;
+    
+    console.log("페이지 재구성 시작...");
+    showStatus("페이지 레이아웃 변경 중...", false);
+    
+    // 1. 현재 읽던 위치 저장 (비율로)
+    const currentProgress = currentPageIndex / (pages.length || 1);
+    
+    // 2. 새로운 페이지 구성 규칙 계산
+    calculateAndUpdateLinesPerPage();
+    
+    // 3. 전체 콘텐츠를 다시 가져와서 페이지 재구성
+    const pageContentEl = document.getElementById('page-content');
+    const fullContent = originalPages.map(p => p.content).join('');
+    await paginateContent(fullContent, pageContentEl);
+    
+    // 4. 저장된 위치와 가장 가까운 새 페이지로 이동
+    // pages.length가 0이 되는 경우를 방지
+    const newTotalPages = pages.length > 0 ? pages.length : 1;
+    let newIndex = Math.round(currentProgress * (newTotalPages - 1));
+    
+    // 인덱스가 범위를 벗어나지 않도록 보정
+    if (newIndex >= pages.length) {
+        newIndex = pages.length - 1;
+    }
+    if (newIndex < 0) {
+        newIndex = 0;
+    }
+    
+    // 5. 새로운 페이지 표시
+    displayPage(newIndex);
+    
+    setTimeout(() => {
+        translationStatus.classList.remove('show');
+    }, 1500);
 }
 
         // 목차 로드
@@ -1864,12 +1950,16 @@ const extractTextFromHTML = (html) => {
     return texts;
 };
         
-// 체크박스 이벤트 리스너 추가
+// ★★★ [5-1단계] '원문과 함께 보기' 체크박스 리스너 수정 ★★★
 showOriginalCheck.addEventListener('change', (e) => {
+    // appState를 업데이트하고 페이지를 재구성합니다.
+    appState.isDualView = e.target.checked;
+    
+    // 전역 설정에도 저장
     showOriginalWithTranslation = e.target.checked;
-    if (targetLangSelect.value && !isTranslating) {
-        translateCurrentPage();
-    }
+    saveSettings(); 
+
+    rePaginateAndDisplay();
 });
 
 
@@ -2560,29 +2650,13 @@ const resetUI = () => {
         let resizeTimer;
         const handleResize = () => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(async () => {
-                if (!book) return;
-
-                const pageContent = document.getElementById('page-content');
-                if (!pageContent) {
-                    console.warn("창 크기 조절 중 뷰어 요소를 찾을 수 없어 페이지 재계산을 건너뜁니다.");
-                    return;
+            resizeTimer = setTimeout(() => {
+                // 책이 로드되었을 때만 페이지 재구성을 실행합니다.
+                if (book) {
+                    rePaginateAndDisplay();
                 }
-
-                // ★★★ 핵심 수정: 현재 페이지 내용을 가져와서 다시 페이지를 나눕니다. ★★★
-                const progress = pages.length > 0 ? currentPageIndex / pages.length : 0;
-                const currentFullContent = originalPages.map(p => p.content).join('');
-                
-                console.log("창 크기 변경 감지, 페이지를 다시 계산합니다.");
-                
-                await paginateContent(currentFullContent, pageContent);
-
-                const newIndex = Math.round(progress * pages.length);
-                displayPage(newIndex < pages.length ? newIndex : pages.length - 1);
-
-            }, 250);
+            }, 250); // 디바운싱으로 불필요한 재계산을 방지합니다.
         };
-
 
         // DOMContentLoaded 안의 resize 이벤트 리스너를 다시 한번 확인해주세요.
         window.addEventListener('resize', handleResize);
